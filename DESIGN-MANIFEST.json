@@ -1,0 +1,27 @@
+{
+  "schema": "autoclaw.autodesign.export.v1",
+  "title": "index.html",
+  "exportedAt": "2026-10-23T11:55:12.051Z",
+  "entryFile": "index-2.html",
+  "sourceFiles": {
+    "all": [
+      "_scrolltest.html",
+      "styles.css",
+      "index.html",
+      "index-2.html"
+    ],
+    "html": [
+      "_scrolltest.html",
+      "index.html",
+      "index-2.html"
+    ],
+    "markdown": [],
+    "images": [],
+    "data": []
+  },
+  "implementationNotes": [
+    "Open the entry file first, then inspect the generated HTML, CSS, Markdown, data and image assets before coding.",
+    "Preserve visible layout, tokens, responsive behavior and meaningful interactions from the exported prototype.",
+    "Keep prototype preview chrome out of the production implementation."
+  ]
+}
