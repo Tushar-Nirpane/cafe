@@ -12,9 +12,15 @@
     try {
       var c = document.createElement('canvas');
       var gl = c.getContext('webgl2') || c.getContext('webgl');
-      if (!gl) document.documentElement.classList.add('no-3d');
-    } catch (e) { document.documentElement.classList.add('no-3d'); }
-    setTimeout(function () { if (!window.__zen) document.documentElement.classList.add('no-3d'); }, 8000);
+      if (!gl) {
+        document.documentElement.classList.add('no-3d');
+      } else {
+        var ext = gl.getExtension('WEBGL_lose_context');
+        if (ext) ext.loseContext();
+      }
+    } catch (e) {
+      document.documentElement.classList.add('no-3d');
+    }
   })();
 </script>
 </head>

@@ -6,10 +6,14 @@ import { TABLES } from './data.js';
  * ------------------------------------------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+document.body.classList.add('is-loaded');
+$('#year').textContent = new Date().getFullYear();
+
 let scene;
 try {
   scene = new CafeScene($('#scene'));
   window.__zen = scene;
+  document.documentElement.classList.remove('no-3d');
 } catch (err) {
   console.error('3D scene unavailable — using photographic fallback', err);
   document.documentElement.classList.add('no-3d');
@@ -23,24 +27,37 @@ try {
   };
 }
 
-document.body.classList.add('is-loaded');
-$('#year').textContent = new Date().getFullYear();
+// Re-measure camera section anchors once images finish loading
+window.addEventListener('load', () => {
+  if (scene && scene.measure) scene.measure();
+}, { passive: true });
+setTimeout(() => { if (scene && scene.measure) scene.measure(); }, 600);
+setTimeout(() => { if (scene && scene.measure) scene.measure(); }, 1800);
 
 /* ------------------------------------------------------------------ *
  *  header themes
  * ------------------------------------------------------------------ */
 const nav = $('#nav');
 const themed = $$('[data-theme]');
+let navTicking = false;
 function updateNav() {
+  navTicking = false;
   let theme = 'dark';
+  const threshold = 84;
   for (const s of themed) {
     const r = s.getBoundingClientRect();
-    if (r.top <= 84 && r.bottom > 84) theme = s.dataset.theme;
+    if (r.top <= threshold && r.bottom > threshold) theme = s.dataset.theme;
   }
   nav.classList.toggle('is-dark', theme === 'light');
   nav.classList.toggle('is-solid', scrollY > innerHeight * 0.9 && theme === 'light');
 }
-addEventListener('scroll', updateNav, { passive: true });
+function onNavScroll() {
+  if (!navTicking) {
+    navTicking = true;
+    requestAnimationFrame(updateNav);
+  }
+}
+addEventListener('scroll', onNavScroll, { passive: true });
 updateNav();
 
 /* ------------------------------------------------------------------ *
@@ -57,9 +74,12 @@ const io = new IntersectionObserver(entries => {
 revealTargets.forEach(el => io.observe(el));
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 const parallaxEls = $$('[data-parallax]');
-function parallax() {
-  if (reduce) return;
+let parallaxTicking = false;
+function runParallax() {
+  parallaxTicking = false;
+  if (reduce || isTouchDevice) return;
   const vh = innerHeight;
   parallaxEls.forEach(el => {
     const r = el.getBoundingClientRect();
@@ -68,8 +88,16 @@ function parallax() {
     el.style.transform = `translate3d(0, ${d.toFixed(1)}px, 0)`;
   });
 }
-addEventListener('scroll', parallax, { passive: true });
-parallax();
+function onParallaxScroll() {
+  if (!parallaxTicking) {
+    parallaxTicking = true;
+    requestAnimationFrame(runParallax);
+  }
+}
+if (!isTouchDevice && !reduce) {
+  addEventListener('scroll', onParallaxScroll, { passive: true });
+  runParallax();
+}
 
 /* ------------------------------------------------------------------ *
  *  reservation state
@@ -290,11 +318,11 @@ function renderPlan() {
     b.classList.toggle('is-sel', state.tableId === t.id);
     b.style.left = p.left + '%';
     b.style.top = p.top + '%';
-    b.style.width = (t.seats >= 6 ? 58 : t.seats === 4 ? 42 : 32) + 'px';
-    b.style.height = (t.seats >= 6 ? 30 : t.seats === 4 ? 36 : 32) + 'px';
+    b.style.width = (t.seats >= 6 ? 56 : t.seats === 4 ? 42 : 34) + 'px';
+    b.style.height = (t.seats >= 6 ? 28 : t.seats === 4 ? 34 : 30) + 'px';
     b.title = `${t.id} · ${t.seats} seats · ${t.zone}${taken ? ' · booked at this time' : tooSmall ? ' · too small for your party' : ''}`;
     b.setAttribute('aria-label', `${t.id}, ${t.seats} seats, ${t.zone}`);
-    b.innerHTML = `<span class="dots">${'<i></i>'.repeat(Math.min(t.seats, 6))}</span>`;
+    b.innerHTML = `<span class="table-num">${t.id}</span><span class="dots">${'<i></i>'.repeat(Math.min(t.seats, 6))}</span>`;
     b.addEventListener('click', () => {
       if (tooSmall) return toast(`Table ${t.id} seats ${t.seats}. Try a larger table.`);
       if (taken) return toast(`Table ${t.id} is taken at ${fmtTime(state.time)}.`);
@@ -341,6 +369,7 @@ function updateTip(cx, cy) {
   els.tip.style.top = `${p.y}px`;
 }
 stage.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') return;
   const id = scene.pickAt(e.clientX, e.clientY);
   const playable = id && (() => {
     const t = TABLES.find(x => x.id === id);

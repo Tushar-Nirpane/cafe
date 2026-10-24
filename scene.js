@@ -148,14 +148,29 @@ const M = {
 export class CafeScene {
   constructor(canvas) {
     this.canvas = canvas;
-    this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.8));
+    this.isMobile = typeof navigator !== 'undefined' && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || innerWidth < 768);
+
+    // Handle context loss gracefully
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('WebGL context lost, falling back to photographic mode');
+      document.documentElement.classList.add('no-3d');
+      if (this.renderer) this.renderer.setAnimationLoop(null);
+    }, false);
+
+    const pixelRatio = Math.min(devicePixelRatio || 1, this.isMobile ? 1.25 : 1.75);
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: !this.isMobile,
+      powerPreference: this.isMobile ? 'default' : 'high-performance',
+      alpha: false
+    });
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.02;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xe7ddc4, 30, 100);
@@ -173,6 +188,7 @@ export class CafeScene {
     this.mouse = new THREE.Vector2(0, 0);
     this.mouseS = new THREE.Vector2(0, 0);
     this.lift = 0;
+    this.prevLift = -1;
     this.roofY = 3.62;
 
     this.buildSky();
@@ -203,6 +219,7 @@ export class CafeScene {
 
     addEventListener('resize', () => this.resize(), { passive: true });
     addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;
       this.mouse.set((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1);
     }, { passive: true });
 
@@ -1076,7 +1093,8 @@ export class CafeScene {
     const sun = new THREE.DirectionalLight(0xffd0a0, 3.35);
     sun.position.set(-14, 9.5, 13);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    const shadowRes = this.isMobile ? 1024 : 2048;
+    sun.shadow.mapSize.set(shadowRes, shadowRes);
     sun.shadow.camera.left = -16;
     sun.shadow.camera.right = 16;
     sun.shadow.camera.top = 14;
@@ -1120,7 +1138,8 @@ export class CafeScene {
   }
 
   buildDust() {
-    const n = 220;
+    if (this.isMobile) return;
+    const n = 180;
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (Math.random() - 0.5) * 12;
@@ -1139,14 +1158,30 @@ export class CafeScene {
 
   /* ---------- measurement / camera ---------- */
   measure() {
+    const scroll = window.scrollY || window.pageYOffset || 0;
     this.anchors = this.sections.map(s => {
       const r = s.getBoundingClientRect();
-      return r.top + scrollY + r.height / 2;
+      return r.top + scroll + r.height / 2;
     });
+    const reserve = document.getElementById('reserve');
+    if (reserve) {
+      const r = reserve.getBoundingClientRect();
+      this.reserveTop = r.top + scroll;
+      this.reserveBottom = r.bottom + scroll;
+    }
   }
 
   resize() {
     const w = innerWidth, h = innerHeight;
+    // On mobile, browser address bar expand/collapse triggers resize events with small height changes.
+    // Avoid reallocating WebGL buffers during active scroll!
+    if (this.lastW && Math.abs(w - this.lastW) < 2 && Math.abs(h - this.lastH) < 90) {
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    this.lastW = w;
+    this.lastH = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -1181,7 +1216,7 @@ export class CafeScene {
     }
 
     this.mouseS.lerp(this.mouse, 1 - Math.pow(0.001, dt));
-    const par = this.reduced ? 0 : 1;
+    const par = (this.reduced || this.isMobile) ? 0 : 1;
     const mx = this.mouseS.x * 0.28 * par;
     const my = this.mouseS.y * 0.14 * par;
 
@@ -1202,37 +1237,42 @@ export class CafeScene {
     this.camera.position.copy(this.curP);
     this.camera.lookAt(this.curT);
 
-    // roof lift while booking
-    const reserve = document.getElementById('reserve');
+    // roof lift while booking (using cached layout positions — NO getBoundingClientRect in RAF)
     let wantLift = 0;
-    if (reserve) {
-      const r = reserve.getBoundingClientRect();
-      if (r.top < vh * 0.55 && r.bottom > vh * 0.45) wantLift = 1;
+    if (this.reserveTop !== undefined) {
+      const rTop = this.reserveTop - scrollY;
+      const rBottom = this.reserveBottom - scrollY;
+      if (rTop < vh * 0.55 && rBottom > vh * 0.45) wantLift = 1;
     }
     this.lift = lerp(this.lift, wantLift, 1 - Math.pow(0.003, dt));
     this.roof.position.y = this.lift * 1.1;
-    const fade = clamp(1 - this.lift / 0.55, 0, 1);
-    [M.ceilingWood, M.beam].forEach(m => {
-      m.transparent = this.lift > 0.012;
-      m.opacity = fade;
-    });
-    this.roof.traverse(o => {
-      if (!o.isMesh || !o.material) return;
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(m => {
-        if (m === M.ceilingWood || m === M.beam) return;
-        if (m.userData.baseOpacity === undefined) m.userData.baseOpacity = m.opacity;
-        if (this.lift > 0.01) {
-          m.transparent = true;
-          m.opacity = m.userData.baseOpacity * fade;
-        } else if (m.userData.baseOpacity === 1) {
-          m.transparent = false;
-          m.opacity = 1;
-        }
+
+    // Only update material transparency and traverse roof when lift is in motion
+    if (Math.abs(this.lift - this.prevLift) > 0.001) {
+      this.prevLift = this.lift;
+      const fade = clamp(1 - this.lift / 0.55, 0, 1);
+      [M.ceilingWood, M.beam].forEach(m => {
+        m.transparent = this.lift > 0.012;
+        m.opacity = fade;
       });
-    });
-    this.roof.visible = this.lift < 0.56;
-    if (this.roofSlats) this.roofSlats.castShadow = this.lift < 0.4;
+      this.roof.traverse(o => {
+        if (!o.isMesh || !o.material) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m => {
+          if (m === M.ceilingWood || m === M.beam) return;
+          if (m.userData.baseOpacity === undefined) m.userData.baseOpacity = m.opacity;
+          if (this.lift > 0.01) {
+            m.transparent = true;
+            m.opacity = m.userData.baseOpacity * fade;
+          } else if (m.userData.baseOpacity === 1) {
+            m.transparent = false;
+            m.opacity = 1;
+          }
+        });
+      });
+      this.roof.visible = this.lift < 0.56;
+      if (this.roofSlats) this.roofSlats.castShadow = this.lift < 0.4;
+    }
   }
 
   frame() {
