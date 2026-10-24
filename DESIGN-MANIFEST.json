@@ -1,23 +1,27 @@
 {
   "schema": "autoclaw.autodesign.export.v1",
-  "title": "index.html",
-  "exportedAt": "2026-10-23T11:55:12.051Z",
-  "entryFile": "index-2.html",
+  "title": "zen-zone-cafe-site.zip",
+  "exportedAt": "2026-10-23T12:45:07.886Z",
+  "entryFile": "zen-zone-cafe-site-2.zip",
   "sourceFiles": {
     "all": [
-      "_scrolltest.html",
-      "styles.css",
-      "index.html",
-      "index-2.html"
+      "zen-zone-cafe-site.zip",
+      "projects/website-cd08d89d1ce8fef5726f1bf7",
+      "projects/projects.json",
+      "projects/website-cd08d89d1ce8fef5726f1bf7/_scrolltest.html",
+      "projects/website-cd08d89d1ce8fef5726f1bf7/styles.css",
+      "projects/website-cd08d89d1ce8fef5726f1bf7/index.html",
+      "zen-zone-cafe-site-2.zip"
     ],
     "html": [
-      "_scrolltest.html",
-      "index.html",
-      "index-2.html"
+      "projects/website-cd08d89d1ce8fef5726f1bf7/_scrolltest.html",
+      "projects/website-cd08d89d1ce8fef5726f1bf7/index.html"
     ],
     "markdown": [],
     "images": [],
-    "data": []
+    "data": [
+      "projects/projects.json"
+    ]
   },
   "implementationNotes": [
     "Open the entry file first, then inspect the generated HTML, CSS, Markdown, data and image assets before coding.",
