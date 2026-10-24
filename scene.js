@@ -210,8 +210,17 @@ export class CafeScene {
       { p: [1.9, 8.8, 3.4], t: [1.9, 0.3, -2.2], fov: 48 },
       { p: [7.4, 2.6, 10.4], t: [0.1, 1.45, -1.1], fov: 38 },
     ];
-    this.curP = new THREE.Vector3(...this.camStates[0].p);
-    this.curT = new THREE.Vector3(...this.camStates[0].t);
+    this.camStatesMobile = [
+      { p: [12.2, 4.6, 18.8], t: [0.15, 1.5, -0.8], fov: 56 }, // Hero: wide view of entire cafe, terrace, pergola, and hills
+      { p: [5.4, 2.8, 9.2], t: [-1.3, 1.3, -2.2], fov: 54 },   // Space: dining room with green ceiling
+      { p: [-6.4, 2.9, 8.6], t: [1.1, 1.2, -2.7], fov: 54 },   // Menu: counter & kitchen side
+      { p: [0.4, 13.8, 3.6], t: [0.4, 0.2, -1.8], fov: 58 },   // Reserve: top-down view showing all 8 tables
+      { p: [10.2, 3.6, 15.6], t: [0.1, 1.4, -0.8], fov: 54 },  // Visit: open terrace front
+    ];
+    const isPortInit = innerWidth < innerHeight;
+    const initStates = isPortInit ? this.camStatesMobile : this.camStates;
+    this.curP = new THREE.Vector3(...initStates[0].p);
+    this.curT = new THREE.Vector3(...initStates[0].t);
 
     this.sections = ['top', 'space', 'menu', 'reserve', 'visit']
       .map(id => document.getElementById(id)).filter(Boolean);
@@ -1201,17 +1210,27 @@ export class CafeScene {
       t = smooth(clamp((center - this.anchors[idx]) / (this.anchors[next] - this.anchors[idx]), 0, 1));
     }
 
-    const a = this.camStates[idx], b = this.camStates[next];
+    const isPortrait = innerWidth < innerHeight;
+    const states = isPortrait ? this.camStatesMobile : this.camStates;
+    const a = states[idx], b = states[next];
     const px = lerp(a.p[0], b.p[0], t);
     const py = lerp(a.p[1], b.p[1], t);
     const pz = lerp(a.p[2], b.p[2], t);
     const tx = lerp(a.t[0], b.t[0], t);
     const ty = lerp(a.t[1], b.t[1], t);
     const tz = lerp(a.t[2], b.t[2], t);
-    const baseFov = lerp(a.fov || 38, b.fov || 38, t);
-    const fov = innerWidth < 720 ? baseFov + 12 : baseFov;
-    if (Math.abs(this.camera.fov - fov) > 0.01) {
-      this.camera.fov = fov;
+
+    // Compute field-of-view taking portrait aspect ratio into account so scene is never over-zoomed
+    const aspect = innerWidth / innerHeight;
+    let targetFov = lerp(a.fov || 38, b.fov || 38, t);
+    if (aspect < 1) {
+      // Maintain horizontal framing in portrait mode (target ~58 deg horizontal FOV)
+      const targetHFov = 58 * (Math.PI / 180);
+      const vFovDeg = 2 * Math.atan(Math.tan(targetHFov / 2) / Math.max(aspect, 0.38)) * (180 / Math.PI);
+      targetFov = clamp(Math.max(targetFov, vFovDeg), 50, 68);
+    }
+    if (Math.abs(this.camera.fov - targetFov) > 0.01) {
+      this.camera.fov = targetFov;
       this.camera.updateProjectionMatrix();
     }
 
@@ -1221,7 +1240,9 @@ export class CafeScene {
     const my = this.mouseS.y * 0.14 * par;
 
     const introEase = this.reduced ? 1 : smooth(clamp(this.intro, 0, 1));
-    const startX = 12.5, startY = 4.3, startZ = 16.5;
+    const startX = isPortrait ? 15.5 : 12.5;
+    const startY = isPortrait ? 5.8 : 4.3;
+    const startZ = isPortrait ? 23.0 : 16.5;
     const goalP = new THREE.Vector3(px + mx, py + my + (1 - introEase) * 1.6, pz);
     const goalT = new THREE.Vector3(tx, ty, tz);
     if (this.intro < 1) {
